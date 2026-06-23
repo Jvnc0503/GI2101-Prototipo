@@ -1,4 +1,6 @@
 import os
+import sqlite3
+import hashlib
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -7,31 +9,108 @@ from groq import Groq
 
 app = FastAPI(title="API de Triage Digital - Clínica Internacional")
 
-# Configuración de CORS para permitir la conexión desde el frontend (React)
+# Configuración de CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # En producción, especificar el dominio del frontend
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Inicializar el cliente de Groq
-# Asegúrate de configurar la variable de entorno: export GROQ_API_KEY="tu_api_key"
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "TU_GROQ_API_KEY_AQUI")
 client = Groq(api_key=GROQ_API_KEY)
 
-# Definición de los modelos de datos con Pydantic
+# ==========================================
+# CONFIGURACIÓN DE BASE DE DATOS (SQLite)
+# ==========================================
+DB_FILE = "clinica.db"
+
+def init_db():
+    """Crea la tabla de usuarios si no existe."""
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            email TEXT UNIQUE NOT NULL,
+            password TEXT NOT NULL
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+# Inicializar la base de datos al arrancar el servidor
+init_db()
+
+def hash_password(password: str) -> str:
+    """Aplica un hash básico (SHA-256) para no guardar la contraseña en texto plano."""
+    return hashlib.sha256(password.encode()).hexdigest()
+
+# ==========================================
+# MODELOS DE DATOS (Pydantic)
+# ==========================================
+class UserRegister(BaseModel):
+    name: str
+    email: str
+    password: str
+
+class UserLogin(BaseModel):
+    email: str
+    password: str
+
 class Message(BaseModel):
-    role: str       # 'user' o 'assistant'
+    role: str
     content: str
 
 class ChatRequest(BaseModel):
     messages: List[Message]
 
-# Prompt del sistema para definir el comportamiento estricto de la IA
+# ==========================================
+# ENDPOINTS DE AUTENTICACIÓN
+# ==========================================
+@app.post("/api/register")
+async def register_user(user: UserRegister):
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    try:
+        hashed_pw = hash_password(user.password)
+        cursor.execute(
+            "INSERT INTO users (name, email, password) VALUES (?, ?, ?)",
+            (user.name, user.email, hashed_pw)
+        )
+        conn.commit()
+        return {"message": "Usuario registrado exitosamente"}
+    except sqlite3.IntegrityError:
+        # El correo ya existe por la restricción UNIQUE
+        raise HTTPException(status_code=400, detail="El correo electrónico ya está registrado.")
+    finally:
+        conn.close()
+
+@app.post("/api/login")
+async def login_user(user: UserLogin):
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    hashed_pw = hash_password(user.password)
+    
+    cursor.execute(
+        "SELECT id, name FROM users WHERE email = ? AND password = ?",
+        (user.email, hashed_pw)
+    )
+    result = cursor.fetchone()
+    conn.close()
+
+    if result:
+        return {"message": "Inicio de sesión exitoso", "name": result[1]}
+    else:
+        raise HTTPException(status_code=401, detail="Correo o contraseña incorrectos.")
+
+# ==========================================
+# ENDPOINT DE INTELIGENCIA ARTIFICIAL
+# ==========================================
 SYSTEM_PROMPT = (
-    "Eres el Asistente Virtual de Triage y Orientación Médica de una clínica. "
+    "Eres el Asistente Virtual de Triage y Orientación Médica de la Clínica Internacional. "
     "Tu objetivo es ayudar al paciente a identificar la especialidad médica adecuada según sus síntomas "
     "o explicar de forma muy didáctica los resultados de exámenes de laboratorio basados en texto. "
     "REGLAS CRÍTICAS DE NEGOCIO Y ÉTICA:\n"
@@ -49,9 +128,8 @@ async def chat_with_groq(request: ChatRequest):
         for msg in request.messages:
             formatted_messages.append({"role": msg.role, "content": msg.content})
 
-        # Llamada a la API de Groq (Modelo actualizado a la familia 3.1)
         completion = client.chat.completions.create(
-            model="llama-3.1-8b-instant", # <- Modelo más rápido y actual soportado por Groq
+            model="llama-3.1-8b-instant",
             messages=formatted_messages,
             temperature=0.3,
             max_tokens=1024,
@@ -66,9 +144,4 @@ async def chat_with_groq(request: ChatRequest):
         print("🔥 ERROR DETALLADO DE GROQ:")
         traceback.print_exc()
         print("="*50 + "\n")
-        
         raise HTTPException(status_code=500, detail=f"Error en el motor de IA: {str(e)}")
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)

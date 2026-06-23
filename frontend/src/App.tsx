@@ -9,16 +9,50 @@ type ViewState = 'login' | 'register' | 'chat';
 
 export default function App() {
   const [view, setView] = useState<ViewState>('login');
+  
+  // Estados para el Chat
   const [messages, setMessages] = useState<Message[]>([
     { role: 'assistant', content: '¡Hola! Soy tu asistente de la Clínica Internacional. Cuéntame qué síntomas tienes o utiliza los botones de simulación rápida para ayudarte.' }
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Manejo simulado de autenticación estática
-  const handleAuth = (e: React.FormEvent) => {
+  // Estados para Autenticación
+  const [authName, setAuthName] = useState('');
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authError, setAuthError] = useState('');
+
+  // Lógica de Autenticación conectada a FastAPI y SQLite
+  const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
-    setView('chat');
+    setAuthError(''); // Limpiar errores previos
+
+    const endpoint = view === 'login' ? '/api/login' : '/api/register';
+    const bodyData = view === 'login' 
+      ? { email: authEmail, password: authPassword }
+      : { name: authName, email: authEmail, password: authPassword };
+
+    try {
+      const response = await fetch(`http://127.0.0.1:8000${endpoint}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(bodyData),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.detail || 'Error en la autenticación');
+      }
+
+      // Si todo sale bien, limpiamos el formulario y entramos al chat
+      setAuthPassword('');
+      setView('chat');
+      
+    } catch (err: any) {
+      setAuthError(err.message);
+    }
   };
 
   // Envío del mensaje al backend de FastAPI
@@ -45,14 +79,13 @@ export default function App() {
     } catch (error) {
       setMessages([
         ...updatedMessages,
-        { role: 'assistant', content: 'Lo siento, hubo un problema al conectar con el servidor de triage. Asegúrate de tener el backend encendido.' }
+        { role: 'assistant', content: 'Lo siento, hubo un problema al conectar con el servidor.' }
       ]);
     } finally {
       setLoading(false);
     }
   };
 
-  // Función para mockear/simular acciones del Customer Journey de forma simple
   const simulateAction = (type: 'sintomas' | 'pdf') => {
     if (type === 'sintomas') {
       sendMessage("Tengo un fuerte dolor de estómago desde ayer por la noche, me dan náuseas al comer.");
@@ -61,22 +94,58 @@ export default function App() {
     }
   };
 
-  // --- Vistas Estáticas ---
+  // --- Vistas de Autenticación (Login / Register) ---
   if (view === 'login' || view === 'register') {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: '#f0f2f5', fontFamily: 'Arial, sans-serif' }}>
         <div style={{ backgroundColor: '#fff', padding: '40px', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', width: '100%', maxWidth: '400px' }}>
           <h2 style={{ textAlign: 'center', color: '#0056b3', marginBottom: '24px' }}>Clínica Internacional</h2>
           <h3 style={{ marginBottom: '16px', color: '#333' }}>{view === 'login' ? 'Iniciar Sesión' : 'Registro de Paciente'}</h3>
+          
+          {authError && (
+            <div style={{ backgroundColor: '#fee2e2', color: '#ef4444', padding: '10px', borderRadius: '4px', marginBottom: '16px', fontSize: '14px', textAlign: 'center' }}>
+              {authError}
+            </div>
+          )}
+
           <form onSubmit={handleAuth} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            {view === 'register' && <input type="text" placeholder="Nombres Completos" required style={inputStyle} />}
-            <input type="email" placeholder="Correo Electrónico" required style={inputStyle} />
-            <input type="password" placeholder="Contraseña" required style={inputStyle} />
+            {view === 'register' && (
+              <input 
+                type="text" 
+                placeholder="Nombres Completos" 
+                required 
+                style={inputStyle}
+                value={authName}
+                onChange={(e) => setAuthName(e.target.value)}
+              />
+            )}
+            <input 
+              type="email" 
+              placeholder="Correo Electrónico" 
+              required 
+              style={inputStyle}
+              value={authEmail}
+              onChange={(e) => setAuthEmail(e.target.value)}
+            />
+            <input 
+              type="password" 
+              placeholder="Contraseña" 
+              required 
+              style={inputStyle}
+              value={authPassword}
+              onChange={(e) => setAuthPassword(e.target.value)}
+            />
             <button type="submit" style={buttonStyle}>{view === 'login' ? 'Ingresar' : 'Registrarse'}</button>
           </form>
+          
           <p style={{ textAlign: 'center', marginTop: '16px', fontSize: '14px', color: '#666' }}>
             {view === 'login' ? '¿No tienes cuenta? ' : '¿Ya tienes cuenta? '}
-            <span style={{ color: '#0056b3', cursor: 'pointer', fontWeight: 'bold' }} onClick={() => setView(view === 'login' ? 'register' : 'login')}>
+            <span 
+              style={{ color: '#0056b3', cursor: 'pointer', fontWeight: 'bold' }} 
+              onClick={() => {
+                setView(view === 'login' ? 'register' : 'login');
+                setAuthError('');
+              }}>
               {view === 'login' ? 'Regístrate aquí' : 'Inicia sesión'}
             </span>
           </p>
@@ -88,7 +157,6 @@ export default function App() {
   // --- Vista del Chat Principal ---
   return (
     <div style={{ display: 'flex', height: '100vh', backgroundColor: '#f5f7fb', fontFamily: 'Arial, sans-serif' }}>
-      {/* Barra Lateral de Controles para el Mock/Demo */}
       <div style={{ width: '300px', backgroundColor: '#002855', color: '#fff', padding: '20px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
         <h3 style={{ margin: 0, borderBottom: '1px solid #ffffff33', paddingBottom: '10px' }}>Pasaporte Digital</h3>
         <p style={{ fontSize: '13px', color: '#cbd5e1', lineHeight: '1.4' }}>
@@ -101,21 +169,25 @@ export default function App() {
           📄 Simular Subida de PDF (Laboratorio)
         </button>
         <div style={{ marginTop: 'auto' }}>
-          <button onClick={() => { setView('login'); setMessages([{ role: 'assistant', content: '¡Hola! Soy tu asistente de la Clínica Internacional...' }]); }} style={{ ...mockButtonStyle, backgroundColor: '#dc2626' }}>
-            Cerrar Sesión (Mock)
+          <button 
+            onClick={() => { 
+              setView('login'); 
+              setAuthPassword(''); // Por seguridad borramos el password al salir
+              setMessages([{ role: 'assistant', content: '¡Hola! Soy tu asistente de la Clínica Internacional...' }]); 
+            }} 
+            style={{ ...mockButtonStyle, backgroundColor: '#dc2626' }}
+          >
+            Cerrar Sesión
           </button>
         </div>
       </div>
 
-      {/* Ventana de Chat */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-        {/* Encabezado */}
         <div style={{ backgroundColor: '#fff', padding: '20px', borderBottom: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
           <h2 style={{ margin: 0, color: '#0056b3', fontSize: '20px' }}>Asistente Virtual de Triage y Orientación</h2>
           <span style={{ fontSize: '12px', color: '#22c55e' }}>● En línea (Modelado con Groq Llama 3)</span>
         </div>
 
-        {/* Historial de Mensajes */}
         <div style={{ flex: 1, padding: '20px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '16px' }}>
           {messages.map((msg, index) => (
             <div key={index} style={{ display: 'flex', justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start' }}>
@@ -143,7 +215,6 @@ export default function App() {
           )}
         </div>
 
-        {/* Barra de Entrada de Texto */}
         <div style={{ padding: '20px', backgroundColor: '#fff', borderTop: '1px solid #e2e8f0' }}>
           <div style={{ display: 'flex', gap: '12px' }}>
             <input
@@ -165,7 +236,7 @@ export default function App() {
   );
 }
 
-// Objetos de Estilo reutilizables (Clean & Explicit)
+// Estilos
 const inputStyle: React.CSSProperties = {
   padding: '12px',
   borderRadius: '6px',

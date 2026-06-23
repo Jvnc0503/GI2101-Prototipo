@@ -1,6 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
-// --- Tipos y Mock Data ---
 type CitaType = 'Presencial' | 'Virtual';
 type AgendamientoMethod = 'Médico' | 'Especialidad';
 type Step = 'TYPE' | 'METHOD' | 'ALL_DOCTORS' | 'SPECIALTIES' | 'LOCATIONS' | 'FILTERED_DOCTORS' | 'DATETIME' | 'CONFIRMATION' | 'SUCCESS';
@@ -9,24 +8,15 @@ interface Doctor {
   id: number;
   name: string;
   specialty: string;
+  location: string;
+  schedule: string;
 }
-
-const SPECIALTIES = ['Medicina General', 'Cardiología', 'Dermatología', 'Neurología', 'Pediatría'];
-const LOCATIONS = ['Sede San Borja', 'Sede Lima Centro', 'Sede Surco', 'Clínica San Isidro'];
-const DOCTORS: Doctor[] = [
-  { id: 1, name: 'Dr. Carlos Mendoza', specialty: 'Medicina General' },
-  { id: 2, name: 'Dra. Lucía Rojas', specialty: 'Cardiología' },
-  { id: 3, name: 'Dr. Jorge Silva', specialty: 'Dermatología' },
-  { id: 4, name: 'Dra. María Fernández', specialty: 'Neurología' },
-  { id: 5, name: 'Dr. Roberto Torres', specialty: 'Pediatría' },
-  { id: 6, name: 'Dra. Ana Gómez', specialty: 'Medicina General' },
-];
-const AVAILABLE_TIMES = ['09:00 AM', '10:00 AM', '11:30 AM', '02:00 PM', '04:30 PM', '06:00 PM'];
 
 export default function AgendarCita({ onCancel }: { onCancel: () => void }) {
   const [step, setStep] = useState<Step>('TYPE');
+  const [doctorsList, setDoctorsList] = useState<Doctor[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   
-  // Estado que acumula las selecciones del usuario
   const [booking, setBooking] = useState({
     type: '' as CitaType | '',
     method: '' as AgendamientoMethod | '',
@@ -37,54 +27,40 @@ export default function AgendarCita({ onCancel }: { onCancel: () => void }) {
     time: ''
   });
 
-  // --- Manejadores de Flujo (Lógica de Negocio) ---
-  const selectType = (type: CitaType) => {
-    setBooking({ ...booking, type });
-    setStep('METHOD');
-  };
+  useEffect(() => {
+    const fetchDoctors = async () => {
+      try {
+        const response = await fetch('http://127.0.0.1:8000/api/doctors');
+        if (!response.ok) throw new Error('Error al obtener médicos');
+        const data = await response.json();
+        setDoctorsList(data);
+      } catch (error) {
+        console.error("Error cargando médicos:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchDoctors();
+  }, []);
 
-  const selectMethod = (method: AgendamientoMethod) => {
-    setBooking({ ...booking, method });
-    setStep(method === 'Médico' ? 'ALL_DOCTORS' : 'SPECIALTIES');
-  };
+  const specialtiesList = Array.from(new Set(doctorsList.map(d => d.specialty)));
+  const locationsList = Array.from(new Set(doctorsList.map(d => d.location)));
+
+  const selectType = (type: CitaType) => { setBooking({ ...booking, type }); setStep('METHOD'); };
+  const selectMethod = (method: AgendamientoMethod) => { setBooking({ ...booking, method }); setStep(method === 'Médico' ? 'ALL_DOCTORS' : 'SPECIALTIES'); };
+  const selectSpecialty = (spec: string) => { setBooking({ ...booking, specialty: spec }); if (booking.type === 'Presencial') setStep('LOCATIONS'); else setStep('FILTERED_DOCTORS'); };
+  const selectLocation = (loc: string) => { setBooking({ ...booking, location: loc }); setStep('FILTERED_DOCTORS'); };
+  const handleConfirm = () => setStep('SUCCESS');
+  const handleCancel = () => { setStep('TYPE'); setBooking({ type: '', method: '', specialty: '', location: '', doctor: null, date: '', time: '' }); };
 
   const selectDoctor = (doc: Doctor) => {
-    setBooking({ ...booking, doctor: doc, specialty: doc.specialty });
-    // Si viene por "Médico" y es presencial, pedir sede. Sino, directo a Fecha/Hora.
-    if (booking.type === 'Presencial') setStep('LOCATIONS');
-    else setStep('DATETIME');
+    setBooking({ ...booking, doctor: doc, specialty: doc.specialty, location: booking.type === 'Virtual' ? 'Virtual' : doc.location });
+    setStep('DATETIME');
   };
 
-  const selectSpecialty = (spec: string) => {
-    setBooking({ ...booking, specialty: spec });
-    // Si es presencial, pedir sede. Si es virtual, ir a la lista de médicos de esa especialidad.
-    if (booking.type === 'Presencial') setStep('LOCATIONS');
-    else setStep('FILTERED_DOCTORS');
-  };
-
-  const selectLocation = (loc: string) => {
-    setBooking({ ...booking, location: loc });
-    // Si venía de "Especialidad", ahora toca elegir médico. Si venía de "Médico", ya lo eligió, pasar a Fecha/Hora.
-    if (booking.method === 'Especialidad') setStep('FILTERED_DOCTORS');
-    else setStep('DATETIME');
-  };
-
-  const handleConfirm = () => setStep('SUCCESS');
-  
-  const handleCancel = () => {
-    // Reiniciar flujo
-    setStep('TYPE');
-    setBooking({ type: '', method: '', specialty: '', location: '', doctor: null, date: '', time: '' });
-  };
-
-  // --- Sub-componentes visuales reutilizables ---
   const Header = ({ title, showBack }: { title: string, showBack?: boolean }) => (
     <div style={{ marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-      {showBack && (
-        <button onClick={() => setStep('TYPE')} style={{...buttonOutlineStyle, padding: '6px 12px', fontSize: '14px'}}>
-          ← Reiniciar
-        </button>
-      )}
+      {showBack && <button onClick={() => setStep('TYPE')} style={{...buttonOutlineStyle, padding: '6px 12px', fontSize: '14px'}}>← Reiniciar</button>}
       <h2 style={{ margin: 0, color: '#002855' }}>{title}</h2>
     </div>
   );
@@ -96,10 +72,10 @@ export default function AgendarCita({ onCancel }: { onCancel: () => void }) {
     </div>
   );
 
-  // --- Renderizado de Pantallas (Vistas del Flujo) ---
+  if (isLoading) return <div style={{ textAlign: 'center', padding: '50px' }}>Cargando datos de la clínica...</div>;
+
   return (
     <div style={{ padding: '32px', maxWidth: '600px', margin: '0 auto', backgroundColor: '#fff', borderRadius: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
-      
       {step === 'TYPE' && (
         <div>
           <Header title="1. ¿Qué tipo de servicio necesitas?" />
@@ -124,9 +100,7 @@ export default function AgendarCita({ onCancel }: { onCancel: () => void }) {
         <div>
           <Header title="Selecciona a tu médico" showBack />
           <div style={{ display: 'flex', gap: '12px', flexDirection: 'column' }}>
-            {DOCTORS.map(doc => (
-              <OptionCard key={doc.id} label={doc.name} subLabel={doc.specialty} onClick={() => selectDoctor(doc)} />
-            ))}
+            {doctorsList.map(doc => <OptionCard key={doc.id} label={doc.name} subLabel={`${doc.specialty} - ${doc.location}`} onClick={() => selectDoctor(doc)} />)}
           </div>
         </div>
       )}
@@ -135,9 +109,7 @@ export default function AgendarCita({ onCancel }: { onCancel: () => void }) {
         <div>
           <Header title="Selecciona la especialidad" showBack />
           <div style={{ display: 'flex', gap: '12px', flexDirection: 'column' }}>
-            {SPECIALTIES.map(spec => (
-              <OptionCard key={spec} label={spec} onClick={() => selectSpecialty(spec)} />
-            ))}
+            {specialtiesList.map(spec => <OptionCard key={spec} label={spec} onClick={() => selectSpecialty(spec)} />)}
           </div>
         </div>
       )}
@@ -146,9 +118,7 @@ export default function AgendarCita({ onCancel }: { onCancel: () => void }) {
         <div>
           <Header title="Selecciona la sede presencial" showBack />
           <div style={{ display: 'flex', gap: '12px', flexDirection: 'column' }}>
-            {LOCATIONS.map(loc => (
-              <OptionCard key={loc} label={loc} onClick={() => selectLocation(loc)} />
-            ))}
+            {locationsList.map(loc => <OptionCard key={loc} label={loc} onClick={() => selectLocation(loc)} />)}
           </div>
         </div>
       )}
@@ -157,9 +127,12 @@ export default function AgendarCita({ onCancel }: { onCancel: () => void }) {
         <div>
           <Header title={`Médicos en ${booking.specialty}`} showBack />
           <div style={{ display: 'flex', gap: '12px', flexDirection: 'column' }}>
-            {DOCTORS.filter(d => d.specialty === booking.specialty).map(doc => (
-              <OptionCard key={doc.id} label={doc.name} subLabel={booking.location ? `Atiende en: ${booking.location}` : 'Atención Virtual'} onClick={() => selectDoctor(doc)} />
+            {doctorsList.filter(d => d.specialty === booking.specialty).filter(d => booking.type === 'Virtual' || d.location === booking.location).map(doc => (
+                <OptionCard key={doc.id} label={doc.name} subLabel={booking.type === 'Virtual' ? 'Atención Virtual' : doc.location} onClick={() => selectDoctor(doc)} />
             ))}
+            {doctorsList.filter(d => d.specialty === booking.specialty).filter(d => booking.type === 'Virtual' || d.location === booking.location).length === 0 && (
+              <p style={{color: 'red'}}>No hay médicos disponibles para esta selección.</p>
+            )}
           </div>
         </div>
       )}
@@ -170,25 +143,15 @@ export default function AgendarCita({ onCancel }: { onCancel: () => void }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             <div>
               <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '8px', color: '#333' }}>Fecha:</label>
-              <input 
-                type="date" 
-                min={new Date().toISOString().split('T')[0]} 
-                style={inputStyle}
-                onChange={(e) => setBooking({...booking, date: e.target.value})}
-              />
+              <input type="date" min={new Date().toISOString().split('T')[0]} style={inputStyle} onChange={(e) => setBooking({...booking, date: e.target.value})} />
             </div>
-            
             {booking.date && (
               <div>
-                <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '8px', color: '#333' }}>Hora disponible:</label>
+                <label style={{ fontWeight: 'bold', display: 'block', marginBottom: '8px', color: '#333' }}>Horas disponibles de {booking.doctor?.name}:</label>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                  {AVAILABLE_TIMES.map(t => (
-                    <button 
-                      key={t} 
-                      onClick={() => { setBooking({...booking, time: t}); setStep('CONFIRMATION'); }}
-                      style={booking.time === t ? buttonStyle : buttonOutlineStyle}
-                    >
-                      {t}
+                  {booking.doctor && booking.doctor.schedule.split(',').map(t => (
+                    <button key={t} onClick={() => { setBooking({...booking, time: t.trim()}); setStep('CONFIRMATION'); }} style={booking.time === t.trim() ? buttonStyle : buttonOutlineStyle}>
+                      {t.trim()}
                     </button>
                   ))}
                 </div>
@@ -209,7 +172,6 @@ export default function AgendarCita({ onCancel }: { onCancel: () => void }) {
             <p><strong>Fecha:</strong> {booking.date}</p>
             <p><strong>Hora:</strong> {booking.time}</p>
           </div>
-          
           <div style={{ display: 'flex', gap: '16px' }}>
             <button onClick={handleConfirm} style={{...buttonStyle, flex: 1, backgroundColor: '#16a34a'}}>✅ Confirmar Cita</button>
             <button onClick={handleCancel} style={{...buttonOutlineStyle, flex: 1, borderColor: '#ef4444', color: '#ef4444'}}>❌ Cancelar</button>
@@ -227,29 +189,12 @@ export default function AgendarCita({ onCancel }: { onCancel: () => void }) {
           <button onClick={onCancel} style={buttonStyle}>Volver al menú principal</button>
         </div>
       )}
-
     </div>
   );
 }
 
-// --- Estilos ---
-const cardStyle: React.CSSProperties = {
-  padding: '16px',
-  border: '1px solid #cbd5e1',
-  borderRadius: '8px',
-  cursor: 'pointer',
-  transition: 'all 0.2s',
-  backgroundColor: '#f8fafc',
-};
-
-const inputStyle: React.CSSProperties = {
-  width: '100%', padding: '12px', borderRadius: '6px', border: '1px solid #ccc', fontSize: '15px', outline: 'none', boxSizing: 'border-box'
-};
-
-const buttonStyle: React.CSSProperties = {
-  padding: '12px', borderRadius: '6px', border: 'none', backgroundColor: '#0056b3', color: '#fff', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer',
-};
-
-const buttonOutlineStyle: React.CSSProperties = {
-  padding: '12px', borderRadius: '6px', border: '1px solid #0056b3', backgroundColor: 'transparent', color: '#0056b3', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer',
-};
+// Estilos
+const cardStyle: React.CSSProperties = { padding: '16px', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', transition: 'all 0.2s', backgroundColor: '#f8fafc' };
+const inputStyle: React.CSSProperties = { width: '100%', padding: '12px', borderRadius: '6px', border: '1px solid #ccc', fontSize: '15px', outline: 'none', boxSizing: 'border-box' };
+const buttonStyle: React.CSSProperties = { padding: '12px', borderRadius: '6px', border: 'none', backgroundColor: '#0056b3', color: '#fff', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer' };
+const buttonOutlineStyle: React.CSSProperties = { padding: '12px', borderRadius: '6px', border: '1px solid #0056b3', backgroundColor: 'transparent', color: '#0056b3', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer' };

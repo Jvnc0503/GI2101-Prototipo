@@ -7,9 +7,8 @@ from pydantic import BaseModel
 from typing import List
 from groq import Groq
 
-app = FastAPI(title="API de Triage Digital - Clínica Internacional")
+app = FastAPI(title="API de Triage Digital - Clínica")
 
-# Configuración de CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -22,12 +21,12 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY", "TU_GROQ_API_KEY_AQUI")
 client = Groq(api_key=GROQ_API_KEY)
 
 # ==========================================
-# CONFIGURACIÓN DE BASE DE DATOS (SQLite)
+# FIX: RUTA ABSOLUTA FORZADA
 # ==========================================
-DB_FILE = "clinica.db"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_FILE = os.path.join(BASE_DIR, "clinica.db")
 
 def init_db():
-    """Crea la tabla de usuarios si no existe."""
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute('''
@@ -38,19 +37,23 @@ def init_db():
             password TEXT NOT NULL
         )
     ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS doctors (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            specialty TEXT NOT NULL,
+            location TEXT NOT NULL,
+            schedule TEXT NOT NULL
+        )
+    ''')
     conn.commit()
     conn.close()
 
-# Inicializar la base de datos al arrancar el servidor
 init_db()
 
 def hash_password(password: str) -> str:
-    """Aplica un hash básico (SHA-256) para no guardar la contraseña en texto plano."""
     return hashlib.sha256(password.encode()).hexdigest()
 
-# ==========================================
-# MODELOS DE DATOS (Pydantic)
-# ==========================================
 class UserRegister(BaseModel):
     name: str
     email: str
@@ -67,23 +70,23 @@ class Message(BaseModel):
 class ChatRequest(BaseModel):
     messages: List[Message]
 
-# ==========================================
-# ENDPOINTS DE AUTENTICACIÓN
-# ==========================================
+class Doctor(BaseModel):
+    id: int
+    name: str
+    specialty: str
+    location: str
+    schedule: str
+
 @app.post("/api/register")
 async def register_user(user: UserRegister):
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     try:
         hashed_pw = hash_password(user.password)
-        cursor.execute(
-            "INSERT INTO users (name, email, password) VALUES (?, ?, ?)",
-            (user.name, user.email, hashed_pw)
-        )
+        cursor.execute("INSERT INTO users (name, email, password) VALUES (?, ?, ?)", (user.name, user.email, hashed_pw))
         conn.commit()
         return {"message": "Usuario registrado exitosamente"}
     except sqlite3.IntegrityError:
-        # El correo ya existe por la restricción UNIQUE
         raise HTTPException(status_code=400, detail="El correo electrónico ya está registrado.")
     finally:
         conn.close()
@@ -93,22 +96,25 @@ async def login_user(user: UserLogin):
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     hashed_pw = hash_password(user.password)
-    
-    cursor.execute(
-        "SELECT id, name FROM users WHERE email = ? AND password = ?",
-        (user.email, hashed_pw)
-    )
+    cursor.execute("SELECT id, name FROM users WHERE email = ? AND password = ?", (user.email, hashed_pw))
     result = cursor.fetchone()
     conn.close()
-
     if result:
         return {"message": "Inicio de sesión exitoso", "name": result[1]}
     else:
         raise HTTPException(status_code=401, detail="Correo o contraseña incorrectos.")
 
-# ==========================================
-# ENDPOINT DE INTELIGENCIA ARTIFICIAL
-# ==========================================
+@app.get("/api/doctors", response_model=List[Doctor])
+async def get_doctors():
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, name, specialty, location, schedule FROM doctors")
+    rows = cursor.fetchall()
+    conn.close()
+    
+    doctors_list = [{"id": r[0], "name": r[1], "specialty": r[2], "location": r[3], "schedule": r[4]} for r in rows]
+    return doctors_list
+
 SYSTEM_PROMPT = (
     "Eres el Asistente Virtual de Triage y Orientación Médica de la Clínica Internacional. "
     "Tu objetivo es ayudar al paciente a identificar la especialidad médica adecuada según sus síntomas "
@@ -134,10 +140,8 @@ async def chat_with_groq(request: ChatRequest):
             temperature=0.3,
             max_tokens=1024,
         )
-
         response_content = completion.choices[0].message.content
         return {"role": "assistant", "content": response_content}
-
     except Exception as e:
         import traceback
         print("\n" + "="*50)

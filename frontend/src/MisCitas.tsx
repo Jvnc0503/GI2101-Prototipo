@@ -27,7 +27,10 @@ export default function MisCitas({ userEmail }: { userEmail: string }) {
         setLoading(false);
       }
     };
-    fetchAppointments();
+    
+    if (userEmail) {
+      fetchAppointments();
+    }
   }, [userEmail]);
 
   if (loading) return <div style={{ textAlign: 'center', padding: '40px' }}>Cargando tus citas...</div>;
@@ -44,21 +47,46 @@ export default function MisCitas({ userEmail }: { userEmail: string }) {
         </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '16px' }}>
-          {appointments.map(appt => (
-            <div key={appt.id} style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderLeft: appt.type === 'Virtual' ? '6px solid #3b82f6' : '6px solid #10b981' }}>
-              <div>
-                <h3 style={{ margin: '0 0 8px 0', color: '#0f172a', fontSize: '18px' }}>{appt.specialty}</h3>
-                <p style={{ margin: '0 0 4px 0', color: '#475569', fontWeight: 'bold' }}>{appt.doctor_name}</p>
-                <p style={{ margin: 0, color: '#64748b', fontSize: '14px' }}>
-                  {appt.type} {appt.type === 'Presencial' ? `📍 ${appt.location}` : '💻 Link será enviado al correo'}
-                </p>
+          {appointments.map(appt => {
+            // --- LÓGICA DE COLORES DINÁMICOS PARA MEJORAR EL CONTRASTE ---
+            const isVirtual = appt.type === 'Virtual';
+            const borderLeftColor = isVirtual ? '#3b82f6' : '#10b981'; // Azul o Verde fuerte
+            const bgDateColor = isVirtual ? '#eff6ff' : '#ecfdf5';     // Fondo Azul o Verde muy claro
+            const borderDateColor = isVirtual ? '#bfdbfe' : '#a7f3d0'; // Borde delineado sutil
+            
+            return (
+              <div key={appt.id} style={{ 
+                backgroundColor: '#fff', 
+                padding: '20px', 
+                borderRadius: '12px', 
+                boxShadow: '0 4px 12px rgba(0,0,0,0.08)', // Sombra ligeramente más fuerte
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center', 
+                borderLeft: `6px solid ${borderLeftColor}` 
+              }}>
+                <div>
+                  <h3 style={{ margin: '0 0 8px 0', color: '#0f172a', fontSize: '18px' }}>{appt.specialty}</h3>
+                  <p style={{ margin: '0 0 4px 0', color: '#475569', fontWeight: 'bold' }}>{appt.doctor_name}</p>
+                  <p style={{ margin: 0, color: '#64748b', fontSize: '14px' }}>
+                    {appt.type} {appt.type === 'Presencial' ? `📍 ${appt.location}` : '💻 Link será enviado al correo'}
+                  </p>
+                </div>
+                
+                {/* CUADRO DE FECHA/HORA CON MEJOR CONTRASTE */}
+                <div style={{ 
+                  textAlign: 'right', 
+                  backgroundColor: bgDateColor, 
+                  padding: '12px', 
+                  borderRadius: '8px', 
+                  border: `1px solid ${borderDateColor}` 
+                }}>
+                  <div style={{ fontWeight: 'bold', color: '#0f172a', fontSize: '16px' }}>📅 {appt.date}</div>
+                  <div style={{ color: isVirtual ? '#2563eb' : '#059669', fontWeight: 'bold', marginTop: '4px' }}>⏰ {appt.time}</div>
+                </div>
               </div>
-              <div style={{ textAlign: 'right', backgroundColor: '#f8fafc', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                <div style={{ fontWeight: 'bold', color: '#0f172a', fontSize: '16px' }}>📅 {appt.date}</div>
-                <div style={{ color: '#0ea5e9', fontWeight: 'bold', marginTop: '4px' }}>⏰ {appt.time}</div>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

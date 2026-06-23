@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import AgendarCita from './AgendarCita';
-import MisCitas from './MisCitas'; // NUEVA IMPORTACIÓN
+import MisCitas from './MisCitas';
 
 interface Message { role: 'user' | 'assistant'; content: string; }
 type ViewState = 'login' | 'register' | 'chat' | 'agendar' | 'mis-citas';
@@ -19,7 +19,6 @@ export default function App() {
   const [authPassword, setAuthPassword] = useState('');
   const [authError, setAuthError] = useState('');
   
-  // ESTADO CLAVE: Guardar quién inició sesión
   const [userEmail, setUserEmail] = useState('');
 
   const handleAuth = async (e: React.FormEvent) => {
@@ -37,7 +36,7 @@ export default function App() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail || 'Error en la autenticación');
       
-      setUserEmail(authEmail); // Guardamos el correo globalmente
+      setUserEmail(authEmail);
       setAuthPassword('');
       setView('chat');
     } catch (err: any) {
@@ -90,21 +89,29 @@ export default function App() {
       <div style={{ width: '300px', backgroundColor: '#002855', color: '#fff', padding: '20px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
         <h3 style={{ margin: 0, borderBottom: '1px solid #ffffff33', paddingBottom: '10px', fontSize: '18px' }}>Mi Pasaporte Digital</h3>
         
-        <button onClick={() => setView('agendar')} style={{ ...mockButtonStyle, backgroundColor: view === 'agendar' ? '#2563eb' : '#ffffff1a', fontWeight: 'bold' }}>📅 Agendar Cita</button>
-        <button onClick={() => setView('mis-citas')} style={{ ...mockButtonStyle, backgroundColor: view === 'mis-citas' ? '#2563eb' : '#ffffff1a', fontWeight: 'bold' }}>🗓️ Mis Citas</button>
-        
+        {/* BOTONES DE NAVEGACIÓN */}
+        <button onClick={() => setView('agendar')} style={{ ...menuButtonStyle, backgroundColor: view === 'agendar' ? '#2563eb' : '#ffffff1a', fontWeight: 'bold' }}>📅 Agendar Cita</button>
+        <button onClick={() => setView('mis-citas')} style={{ ...menuButtonStyle, backgroundColor: view === 'mis-citas' ? '#2563eb' : '#ffffff1a', fontWeight: 'bold' }}>🗓️ Mis Citas</button>
+        <button onClick={() => setView('chat')} style={{ ...menuButtonStyle, backgroundColor: view === 'chat' ? '#2563eb' : '#ffffff1a', fontWeight: 'bold' }}>💬 Chat Asistente</button>
+
         <hr style={{ border: '1px solid #ffffff33', width: '100%', margin: '10px 0' }} />
+        
+        {/* BOTONES DE SIMULACIÓN IA (AHORA CON MEJOR CONTRASTE) */}
         <span style={{ fontSize: '12px', color: '#cbd5e1' }}>Simulaciones de Triage (IA)</span>
-        <button onClick={() => { setView('chat'); sendMessage("Tengo un fuerte dolor de estómago..."); }} style={mockButtonStyle}>📋 Simular Síntomas</button>
-        <button onClick={() => { setView('chat'); sendMessage("[Simulación PDF] Glucosa: 135 mg/dL"); }} style={mockButtonStyle}>📄 Simular Examen PDF</button>
+        <button onClick={() => { setView('chat'); sendMessage("Tengo un fuerte dolor de estómago desde ayer por la noche, me dan náuseas al comer."); }} style={aiButtonStyle}>
+          📋 Simular Síntomas
+        </button>
+        <button onClick={() => { setView('chat'); sendMessage("[Simulación de Archivo PDF Adjunto: Examen_Laboratorio_Glucosa.pdf]\nContenido extraído del PDF:\n- Glucosa en ayunas: 135 mg/dL\n- Rango de referencia normal: 70 - 100 mg/dL"); }} style={aiButtonStyle}>
+          📄 Simular Examen PDF
+        </button>
         
         <div style={{ marginTop: 'auto' }}>
           <div style={{ fontSize: '12px', color: '#cbd5e1', marginBottom: '8px' }}>Usuario: {userEmail}</div>
-          <button onClick={() => { setView('login'); setUserEmail(''); }} style={{ ...mockButtonStyle, backgroundColor: '#dc2626', width: '100%' }}>Cerrar Sesión</button>
+          <button onClick={() => { setView('login'); setUserEmail(''); }} style={{ ...menuButtonStyle, backgroundColor: '#dc2626', width: '100%' }}>Cerrar Sesión</button>
         </div>
       </div>
 
-      {/* CONTENIDO PRINCIPAL (Gestor de Vistas) */}
+      {/* CONTENIDO PRINCIPAL */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
         {view === 'agendar' && <div style={{ flex: 1, padding: '40px', overflowY: 'auto' }}><AgendarCita userEmail={userEmail} onCancel={() => setView('mis-citas')} /></div>}
         {view === 'mis-citas' && <div style={{ flex: 1, padding: '40px', overflowY: 'auto' }}><MisCitas userEmail={userEmail} /></div>}
@@ -138,4 +145,9 @@ export default function App() {
 // Estilos
 const inputStyle: React.CSSProperties = { padding: '12px', borderRadius: '6px', border: '1px solid #ccc', fontSize: '15px', outline: 'none' };
 const buttonStyle: React.CSSProperties = { padding: '12px', borderRadius: '6px', border: 'none', backgroundColor: '#0056b3', color: '#fff', fontSize: '16px', fontWeight: 'bold', cursor: 'pointer' };
-const mockButtonStyle: React.CSSProperties = { padding: '12px', borderRadius: '6px', border: '1px solid #ffffff44', color: '#fff', fontSize: '14px', textAlign: 'left', cursor: 'pointer', transition: 'background 0.2s' };
+
+// Botones estándar del menú (Fondo semitransparente)
+const menuButtonStyle: React.CSSProperties = { padding: '12px', borderRadius: '6px', border: '1px solid #ffffff44', color: '#fff', fontSize: '14px', textAlign: 'left', cursor: 'pointer', transition: 'background 0.2s' };
+
+// Botones de IA (Fondo índigo sólido para que destaquen)
+const aiButtonStyle: React.CSSProperties = { padding: '12px', borderRadius: '6px', border: '1px solid #6366f1', backgroundColor: '#4f46e5', color: '#fff', fontSize: '14px', textAlign: 'left', cursor: 'pointer', transition: 'background 0.2s', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' };

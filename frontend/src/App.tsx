@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
+import AgendarCita from './AgendarCita';
 
 interface Message {
   role: 'user' | 'assistant';
   content: string;
 }
 
-type ViewState = 'login' | 'register' | 'chat';
+type ViewState = 'login' | 'register' | 'chat' | 'agendar';
 
 export default function App() {
   const [view, setView] = useState<ViewState>('login');
@@ -168,6 +169,12 @@ export default function App() {
         <button onClick={() => simulateAction('pdf')} style={mockButtonStyle}>
           📄 Simular Subida de PDF (Laboratorio)
         </button>
+        <button onClick={() => setView('agendar')} style={{ ...mockButtonStyle, backgroundColor: '#2563eb' }}>
+          📅 Agendar Cita (Nuevo)
+        </button>
+        <button onClick={() => simulateAction('sintomas')} style={mockButtonStyle}>
+          📋 Simular Triage por Síntomas
+        </button>
         <div style={{ marginTop: 'auto' }}>
           <button 
             onClick={() => { 
@@ -182,6 +189,11 @@ export default function App() {
         </div>
       </div>
 
+      {view === 'agendar' ? (
+        <div style={{ flex: 1, padding: '40px', overflowY: 'auto', backgroundColor: '#f0f2f5' }}>
+          <AgendarCita onCancel={() => setView('chat')} />
+        </div>
+      ) : (
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
         <div style={{ backgroundColor: '#fff', padding: '20px', borderBottom: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
           <h2 style={{ margin: 0, color: '#0056b3', fontSize: '20px' }}>Asistente Virtual de Triage y Orientación</h2>
@@ -231,7 +243,7 @@ export default function App() {
             </button>
           </div>
         </div>
-      </div>
+      </div>)}
     </div>
   );
 }
